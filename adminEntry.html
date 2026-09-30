@@ -1,0 +1,407 @@
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    #adminEntryArea {
+  padding: 24px;
+  font-family: Arial, sans-serif;
+  background: #eef5f2;
+  color: #20332e;
+  min-height: 100vh;
+}
+
+.entry-card {
+  max-width: 950px;
+  margin: 0 auto;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 18px 24px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+}
+
+.entry-header {
+  margin-bottom: 12px;
+}
+
+.entry-header h2 {
+  margin: 0 0 3px;
+  font-size: 22px;
+}
+
+.entry-header p {
+  margin: 0;
+  color: #667a74;
+  font-size: 12px;
+}
+
+.entry-type-box {
+  margin-bottom: 12px;
+  padding: 10px 14px;
+  background: #f4f9f7;
+  border-radius: 10px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  column-gap: 16px;
+  row-gap: 5px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 4px;
+}
+
+.form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+label {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #cbd8d3;
+  border-radius: 8px;
+  font-size: 13px;
+  background: #ffffff;
+}
+
+input,
+select {
+  height: 36px;
+}
+
+textarea {
+  min-height: 45px;
+  max-height: 55px;
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #177c72;
+}
+
+.pallet-field.hidden {
+  display: none;
+}
+
+.destination-box {
+  margin-top: 10px;
+  padding: 9px 13px;
+  border-radius: 9px;
+  background: #edf7f4;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.button-row {
+  margin-top: 12px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.back-button {
+  border: 1px solid #b9ccc6;
+  border-radius: 9px;
+  padding: 9px 22px;
+  min-height: 36px;
+  background: #eef5f2;
+  color: #315e54;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.back-button:hover {
+  background: #dfece7;
+}
+
+.save-button {
+  border: none;
+  border-radius: 9px;
+  padding: 9px 22px;
+  min-height: 36px;
+  background: #177c72;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+   @media (max-width: 700px) {
+      .form-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .form-group.full-width {
+        grid-column: auto;
+      }
+    }
+
+  /* your existing CSS above */
+
+
+/* PROFESSIONAL SAVE MESSAGE */
+
+.entry-save-message {
+  margin-top: 12px;
+  padding: 12px 18px;
+  border-radius: 10px;
+  background: #e8f6f1;
+  border: 1px solid #9bcfc0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #176b5d;
+}
+
+.entry-save-message.hidden {
+  display: none !important;
+}
+
+.entry-save-icon {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  background: #177c72;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+
+
+
+  </style>
+</head>
+
+<body>
+
+  <div class="entry-card">
+
+    <div class="entry-header">
+      <h2>New Credit Note Entry</h2>
+      <p>Enter the new pending credit note details.</p>
+    </div>
+
+
+    <!-- ENTRY TYPE -->
+
+    <div class="entry-type-box">
+
+      <div class="form-group">
+        <label for="entryType">Entry Type</label>
+
+        <select id="entryType"
+                onchange="handleEntryTypeChange()">
+
+          <option value="NORMAL">
+            Normal
+          </option>
+
+          <option value="PALLET">
+            Pallet
+          </option>
+
+        </select>
+      </div>
+
+    </div>
+
+
+    <!-- ENTRY DETAILS -->
+
+    <!-- LOGGED-IN ADMIN DETAILS -->
+
+<div class="form-grid"
+     style="margin-bottom: 12px;">
+
+  <div class="form-group">
+    <label>Admin Name</label>
+
+    <input type="text"
+           id="entryAdminName"
+           readonly>
+  </div>
+
+  <div class="form-group">
+    <label>Branch</label>
+
+    <input type="text"
+           id="entryBranchName"
+           readonly>
+  </div>
+
+</div>
+
+    <div class="form-grid">
+
+      <div class="form-group"
+     id="grvNoField">
+
+  <label for="grvNo">GRV No.</label>
+
+  <input type="text"
+         id="grvNo">
+</div>
+
+
+      <div class="form-group">
+        <label for="grvDate">GRV Date</label>
+        <input type="date"
+               id="grvDate">
+      </div>
+
+
+      <div class="form-group">
+  <label for="supplierName">Supplier Name</label>
+
+  <select id="supplierName"
+          onchange="handleSupplierChange()"
+          required>
+
+    <option value="">
+      Loading suppliers...
+    </option>
+
+  </select>
+</div>
+
+<div class="form-group hidden"
+     id="newSupplierField">
+
+  <label for="newSupplierName">
+    New Supplier Name
+  </label>
+
+  <input type="text"
+         id="newSupplierName"
+         placeholder="Enter new supplier name">
+
+</div>
+
+      <div class="form-group">
+        <label for="returnGrvNo">
+          Return GRV No.
+        </label>
+
+        <input type="text"
+       id="returnGrvNo"
+       oninput="updatePalletNarration()">
+      </div>
+
+
+      <div class="form-group">
+        <label for="invoiceNo">
+          Invoice / Slip No.
+        </label>
+
+        <input type="text"
+       id="invoiceNo"
+       oninput="updatePalletNarration()">
+      </div>
+
+
+      <div id="palletField"
+           class="form-group pallet-field hidden">
+
+        <label for="palletQty">
+          Pallet Qty
+        </label>
+
+        <input type="number"
+       id="palletQty"
+       min="1"
+       step="1"
+       oninput="updatePalletNarration()">
+      </div>
+
+
+      <div class="form-group">
+        <label for="amount">Amount</label>
+
+        <input type="number"
+               id="amount"
+               min="0"
+               step="0.01"
+               oninput="updateDestination()">
+      </div>
+
+
+      <div class="form-group full-width">
+        <label for="narration">Narration</label>
+
+        <textarea id="narration"></textarea>
+      </div>
+
+    </div>
+
+  <!-- PROFESSIONAL SAVE MESSAGE -->
+
+<div id="entrySaveMessage"
+     class="entry-save-message hidden">
+
+  <div class="entry-save-icon">✓</div>
+
+  <div class="entry-save-text">
+    YOUR ENTRY SAVED !!!
+  </div>
+
+</div>
+
+
+    <!-- DESTINATION -->
+
+    <div id="destinationBox"
+         class="destination-box">
+
+      Destination:
+      <span id="destinationText">
+        Enter an amount
+      </span>
+
+    </div>
+
+
+    <!-- SAVE -->
+
+    <div class="button-row">
+
+  <button type="button"
+          class="back-button"
+          onclick="closeAdminNewEntryPage()">
+    ← Back
+  </button>
+
+  <button type="button"
+          class="save-button"
+          onclick="prepareAdminEntry()">
+    Save Entry
+  </button>
+
+  </div>
+
+  </div>
+
+
+  
