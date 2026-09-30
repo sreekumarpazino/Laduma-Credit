@@ -5,10 +5,12 @@ const BRANCH_SHEET = "Branches";
 const REGION_SHEET = "Regions";
 
 
-function doGet() {
+function doGet(e) {
   return HtmlService
     .createHtmlOutputFromFile("Index")
-    .setTitle("Laduma – Pending Credit Note Management");
+    .setTitle("Laduma – Pending Credit Note Management")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
 
 /* =========================================
@@ -1488,49 +1490,44 @@ function userCanAccessBranch(user, branchName) {
  * BRANCH LOOKUP
  ************************************************************/
 
+let _branchLookupCache = null;
+
 function getBranchInfo(branchName) {
-
-  const ss = getSpreadsheet();
-
-  const sheet =
-    ss.getSheetByName(BRANCH_SHEET);
-
-  if (!sheet) {
-    return null;
-  }
-
-  const values =
-    sheet.getDataRange().getValues();
 
   const wanted =
     String(branchName || "")
       .trim()
       .toLowerCase();
 
+  if (!wanted) {
+    return null;
+  }
 
-  for (let i = 1; i < values.length; i++) {
+  if (!_branchLookupCache) {
+    _branchLookupCache = {};
+    const ss = getSpreadsheet();
+    const sheet = ss.getSheetByName(BRANCH_SHEET);
 
-    const currentName =
-      String(values[i][1] || "")
-        .trim()
-        .toLowerCase();
+    if (sheet) {
+      const values = sheet.getDataRange().getValues();
+      for (let i = 1; i < values.length; i++) {
+        const currentName =
+          String(values[i][1] || "")
+            .trim()
+            .toLowerCase();
 
-    if (currentName === wanted) {
-
-      return {
-        branchId:
-          String(values[i][0] || "").trim(),
-
-        branchName:
-          String(values[i][1] || "").trim(),
-
-        region:
-          String(values[i][2] || "").trim()
-      };
+        if (currentName) {
+          _branchLookupCache[currentName] = {
+            branchId: String(values[i][0] || "").trim(),
+            branchName: String(values[i][1] || "").trim(),
+            region: String(values[i][2] || "").trim()
+          };
+        }
+      }
     }
   }
 
-  return null;
+  return _branchLookupCache[wanted] || null;
 }
 
 
@@ -3006,8 +3003,27 @@ function performMonthlyDatabaseCleanup(userId) {
 
   // -------------------------------------------------------
   // DELETE FULL SOURCE DATABASE ROWS
-  // HIGHEST ROW FIRST
+  // BATCHED CONTIGUOUS ROWS, HIGHEST FIRST
   // -------------------------------------------------------
+
+  function deleteRowsBatched(sheet, rowsDesc) {
+    if (!sheet || !rowsDesc || rowsDesc.length === 0) {
+      return;
+    }
+    let idx = 0;
+    while (idx < rowsDesc.length) {
+      let count = 1;
+      while (
+        idx + count < rowsDesc.length &&
+        rowsDesc[idx + count] === rowsDesc[idx] - count
+      ) {
+        count++;
+      }
+      const startRow = rowsDesc[idx] - count + 1;
+      sheet.deleteRows(startRow, count);
+      idx += count;
+    }
+  }
 
   allowedSheets.forEach(function(sheetName) {
 
@@ -3018,7 +3034,6 @@ function performMonthlyDatabaseCleanup(userId) {
       return;
     }
 
-
     const rows =
       deletedRowsBySheet[sheetName]
         .slice()
@@ -3026,18 +3041,13 @@ function performMonthlyDatabaseCleanup(userId) {
           return b - a;
         });
 
-
-    rows.forEach(function(rowNumber) {
-
-      source.deleteRow(rowNumber);
-
-    });
+    deleteRowsBatched(source, rows);
   });
 
 
   // -------------------------------------------------------
   // DELETE COMPLETED ACTIVITY ROWS
-  // HIGHEST ROW FIRST
+  // BATCHED CONTIGUOUS ROWS, HIGHEST FIRST
   // -------------------------------------------------------
 
   activityRowsToDelete
@@ -3045,14 +3055,7 @@ function performMonthlyDatabaseCleanup(userId) {
       return b - a;
     });
 
-
-  activityRowsToDelete
-    .forEach(function(rowNumber) {
-
-      activitySheet.deleteRow(rowNumber);
-
-    });
-
+  deleteRowsBatched(activitySheet, activityRowsToDelete);
 
   SpreadsheetApp.flush();
 
@@ -3527,247 +3530,71 @@ var grvDate =
 
 
     // -----------------------------------------------------
-    // COMMON COLUMNS
-    //
-    // B = Invoice / Slip No.
-    // E = Supplier Name
-    // F = Amount
-    // G/H/etc depend on destination
+    // PREPARE AND WRITE ROW IN ONE ATOMIC OPERATION
     // -----------------------------------------------------
-
-    destinationSheet
-      .getRange(newRow, 2)
-      .setValue(invoiceNo);
-
-    destinationSheet
-      .getRange(newRow, 5)
-      .setValue(supplierName);
-
-    destinationSheet
-      .getRange(newRow, 6)
-      .setValue(amount);
-
-    destinationSheet
-      .getRange(newRow, 8)
-      .setValue(grvNo);
-
-    destinationSheet
-      .getRange(newRow, 9)
-      .setValue(grvDate)
-      .setNumberFormat("dd-mmm-yyyy");
-
-
-    // -----------------------------------------------------
-    // SHEET-SPECIFIC COLUMN MAPPING
-    // -----------------------------------------------------
+    var rowData = [];
 
     if (destinationSheetName === "BELOW 3K") {
+      rowData = new Array(15).fill("");
+      rowData[0] = grvDate;
+      rowData[1] = invoiceNo;
+      rowData[2] = grvNo;
+      rowData[4] = supplierName;
+      rowData[5] = amount;
+      rowData[6] = branchName;
+      rowData[7] = returnGrvNo;
+      rowData[8] = adminName;
+      rowData[14] = narration;
+    } else if (destinationSheetName === "3K TO 10 K") {
+      rowData = new Array(12).fill("");
+      rowData[0] = grvDate;
+      rowData[1] = invoiceNo;
+      rowData[2] = grvNo;
+      rowData[4] = supplierName;
+      rowData[5] = amount;
+      rowData[6] = branchName;
+      rowData[7] = returnGrvNo;
+      rowData[8] = adminName;
+      rowData[11] = narration;
+    } else if (destinationSheetName === "ABOVE 10 K") {
+      rowData = new Array(10).fill("");
+      rowData[0] = grvDate;
+      rowData[1] = invoiceNo;
+      rowData[2] = grvNo;
+      rowData[4] = supplierName;
+      rowData[5] = amount;
+      rowData[6] = branchName;
+      rowData[7] = returnGrvNo;
+      rowData[8] = adminName;
+      rowData[9] = narration;
+    } else if (destinationSheetName === "Pallets") {
+      var palletNarrationParts = [];
+      if (palletQty) {
+        palletNarrationParts.push(palletQty + " EMPTY PALLETS RETURNED");
+      }
+      if (returnGrvNo) {
+        palletNarrationParts.push("RETURN GRV NO. " + returnGrvNo);
+      }
+      if (invoiceNo) {
+        palletNarrationParts.push("SLIP NO. " + invoiceNo);
+      }
+      var palletNarration = palletNarrationParts.join(" - ");
 
-  // A = GRV Date
-  destinationSheet.getRange(newRow, 1)
-    .setValue(grvDate)
-    .setNumberFormat("dd-mmm-yyyy");
+      rowData = new Array(14).fill("");
+      rowData[0] = grvDate;
+      rowData[1] = invoiceNo;
+      rowData[4] = supplierName;
+      rowData[5] = amount;
+      rowData[6] = branchName;
+      rowData[7] = returnGrvNo;
+      rowData[8] = adminName;
+      rowData[9] = palletQty;
+      rowData[13] = palletNarration;
+    }
 
-  // B = Invoice / Slip No.
-  destinationSheet.getRange(newRow, 2)
-    .setValue(invoiceNo);
-
-  // C = GRV No.
-  destinationSheet.getRange(newRow, 3)
-    .setValue(grvNo);
-
-  // E = Supplier Name
-  destinationSheet.getRange(newRow, 5)
-    .setValue(supplierName);
-
-  // F = Amount
-  destinationSheet.getRange(newRow, 6)
-    .setValue(amount);
-
-  // G = Branch
-  destinationSheet.getRange(newRow, 7)
-    .setValue(branchName);
-
-  // H = Return GRV No.
-  destinationSheet.getRange(newRow, 8)
-    .setValue(returnGrvNo);
-
-  // I = Admin Name
-  destinationSheet.getRange(newRow, 9)
-    .setValue(adminName);
-
-  // O = Narration
-  destinationSheet.getRange(newRow, 15)
-    .setValue(narration);
-
-
-    } else if (
-  destinationSheetName === "3K TO 10 K"
-) {
-
-  // A = GRV Date
-  destinationSheet.getRange(newRow, 1)
-    .setValue(grvDate)
-    .setNumberFormat("dd-mmm-yyyy");
-
-  // B = Invoice / Slip No.
-  destinationSheet.getRange(newRow, 2)
-    .setValue(invoiceNo);
-
-  // C = GRV No.
-  destinationSheet.getRange(newRow, 3)
-    .setValue(grvNo);
-
-  // E = Supplier Name
-  destinationSheet.getRange(newRow, 5)
-    .setValue(supplierName);
-
-  // F = Amount
-  destinationSheet.getRange(newRow, 6)
-    .setValue(amount);
-
-  // G = Branch
-  destinationSheet.getRange(newRow, 7)
-    .setValue(branchName);
-
-  // H = Return GRV No.
-  destinationSheet.getRange(newRow, 8)
-    .setValue(returnGrvNo);
-
-  // I = Admin Name
-  destinationSheet.getRange(newRow, 9)
-    .setValue(adminName);
-
-  // L = Narration
-  destinationSheet.getRange(newRow, 12)
-    .setValue(narration);
-
-
-    } else if (
-  destinationSheetName === "ABOVE 10 K"
-) {
-
-  // A = GRV Date
-  destinationSheet.getRange(newRow, 1)
-    .setValue(grvDate)
-    .setNumberFormat("dd-mmm-yyyy");
-
-  // B = Invoice / Slip No.
-  destinationSheet.getRange(newRow, 2)
-    .setValue(invoiceNo);
-
-  // C = GRV No.
-  destinationSheet.getRange(newRow, 3)
-    .setValue(grvNo);
-
-  // E = Supplier Name
-  destinationSheet.getRange(newRow, 5)
-    .setValue(supplierName);
-
-  // F = Amount
-  destinationSheet.getRange(newRow, 6)
-    .setValue(amount);
-
-  // G = Branch
-  destinationSheet.getRange(newRow, 7)
-    .setValue(branchName);
-
-  // H = Return GRV No.
-  destinationSheet.getRange(newRow, 8)
-    .setValue(returnGrvNo);
-
-  // I = Admin Name
-  destinationSheet.getRange(newRow, 9)
-    .setValue(adminName);
-
-  // J = Narration
-  destinationSheet.getRange(newRow, 10)
-    .setValue(narration);
-
-    // Keep new entry text in normal font
-      destinationSheet
-      .getRange(newRow, 1, 1, 10)
-      .setFontWeight("normal");
-
-
-   } else if (
-  destinationSheetName === "Pallets"
-) {
-
-  // A = GRV Date
-  destinationSheet.getRange(newRow, 1)
-    .setValue(grvDate)
-    .setNumberFormat("dd-mmm-yyyy");
-
-  // B = Invoice / Slip No.
-  destinationSheet.getRange(newRow, 2)
-    .setValue(invoiceNo);
-
-  // C = GRV No. not required for Pallet
-  destinationSheet.getRange(newRow, 3)
-    .clearContent();
-
-  // E = Supplier Name
-  destinationSheet.getRange(newRow, 5)
-    .setValue(supplierName);
-
-  // F = Amount
-  destinationSheet.getRange(newRow, 6)
-    .setValue(amount);
-
-  // G = Branch
-  destinationSheet.getRange(newRow, 7)
-    .setValue(branchName);
-
-  // H = Return GRV No.
-  destinationSheet.getRange(newRow, 8)
-    .setValue(returnGrvNo);
-
-  // I = Admin Name
-  destinationSheet.getRange(newRow, 9)
-    .setValue(adminName);
-
-  // J = Pallet Qty
-  destinationSheet.getRange(newRow, 10)
-    .setValue(palletQty);
-
-
-  // -----------------------------------------
-  // N = AUTOMATIC PALLET NARRATION
-  // -----------------------------------------
-
-  var palletNarrationParts = [];
-
-  if (palletQty) {
-    palletNarrationParts.push(
-      palletQty + " EMPTY PALLETS RETURNED"
-    );
-  }
-
-  if (returnGrvNo) {
-    palletNarrationParts.push(
-      "RETURN GRV NO. " + returnGrvNo
-    );
-  }
-
-  if (invoiceNo) {
-    palletNarrationParts.push(
-      "SLIP NO. " + invoiceNo
-    );
-  }
-
-  var palletNarration =
-    palletNarrationParts.join(" - ");
-
-  destinationSheet.getRange(newRow, 14)
-    .setValue(palletNarration);
-
-
-  // Keep new entry text in normal font
-  destinationSheet
-    .getRange(newRow, 1, 1, 14)
-    .setFontWeight("normal");
-}
+    destinationSheet.getRange(newRow, 1, 1, rowData.length).setValues([rowData]);
+    destinationSheet.getRange(newRow, 1).setNumberFormat("dd-mmm-yyyy");
+    destinationSheet.getRange(newRow, 1, 1, rowData.length).setFontWeight("normal");
 
     // -----------------------------------------------------
     // SUCCESS
@@ -3832,12 +3659,23 @@ function getUniqueSupplierNames() {
         return;
       }
 
-      // Supplier Name = Column E
+      // Locate Supplier column dynamically by header
+      var lastCol = sheet.getLastColumn();
+      var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      var supplierCol = 5; // default column E fallback
+      for (var h = 0; h < headers.length; h++) {
+        var hName = String(headers[h] || "").trim().toUpperCase();
+        if (hName.indexOf("SUPPLIER") !== -1) {
+          supplierCol = h + 1;
+          break;
+        }
+      }
+
       var values =
         sheet
           .getRange(
             2,
-            5,
+            supplierCol,
             lastRow - 1,
             1
           )
@@ -3962,67 +3800,6 @@ function testPermanentMonthlyCleanup() {
   );
 }
 
-function testPermanentMonthlyCleanup() {
-
-  const preview =
-    getMonthlyCleanupPreview("sree");
-
-  Logger.log(
-    "BEFORE CLEANUP: " +
-    JSON.stringify(preview)
-  );
-
-
-  /*
-   * SAFETY CHECK
-   *
-   * For this first controlled test,
-   * cleanup will run ONLY when exactly
-   * ONE record is waiting.
-   */
-  if (preview.total !== 1) {
-
-    throw new Error(
-      "TEST STOPPED. Expected exactly 1 record waiting for cleanup, but found " +
-      preview.total +
-      ". Nothing was deleted."
-    );
-  }
-
-
-  const result =
-    performMonthlyDatabaseCleanup("sree");
-
-
-  Logger.log(
-    "CLEANUP RESULT: " +
-    JSON.stringify(result)
-  );
-
-
-  const afterPreview =
-    getMonthlyCleanupPreview("sree");
-
-
-  Logger.log(
-    "AFTER CLEANUP: " +
-    JSON.stringify(afterPreview)
-  );
-}
-
-function testRegion2CreditNotes() {
-
-  const result =
-    getCreditNoteRecords(
-      "YOUR_TEAM_LEADER_USER_ID",
-      "CONSOLIDATED" 
-    );
-
-  Logger.log(
-    JSON.stringify(result, null, 2)
-  );
-}
-
 function testRegion2CreditNotes() {
 
   const result =
@@ -4034,4 +3811,55 @@ function testRegion2CreditNotes() {
   Logger.log(
     JSON.stringify(result, null, 2)
   );
+}
+
+/* =========================================================
+   FEDERATED SSO USER SYNC (LADUMA APP INTEGRATION)
+   Allows users authenticated in the parent Laduma App
+   to access the credit note portal seamlessly.
+   ========================================================= */
+
+function syncFederatedLadumaUser(user) {
+  if (!user || !user.userId) {
+    throw new Error("Invalid federated user payload.");
+  }
+
+  ensureUsersSheet();
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(USERS_SHEET);
+  const values = sheet.getDataRange().getValues();
+  const targetId = String(user.userId).trim().toLowerCase();
+
+  let foundRow = -1;
+  for (let i = 1; i < values.length; i++) {
+    if (String(values[i][0] || "").trim().toLowerCase() === targetId) {
+      foundRow = i + 1;
+      break;
+    }
+  }
+
+  const userType = String(user.userType || "ADMIN").trim().toUpperCase();
+  const region = String(user.region || "").trim();
+  const branchId = String(user.branchId || "").trim();
+  const branchName = String(user.branchName || "").trim();
+  const userName = String(user.userName || user.name || user.userId).trim();
+
+  const rowData = [
+    String(user.userId).trim(),
+    userName,
+    "FEDERATED_LADUMA_SSO",
+    userType,
+    region,
+    branchId,
+    branchName,
+    "ACTIVE"
+  ];
+
+  if (foundRow > 0) {
+    sheet.getRange(foundRow, 1, 1, 8).setValues([rowData]);
+  } else {
+    sheet.appendRow(rowData);
+  }
+
+  return getLadumaUser(user.userId);
 }
