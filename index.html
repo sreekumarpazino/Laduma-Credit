@@ -8302,7 +8302,7 @@ let categoryLoadingPercent = 0;
 
 
     /* =========================================
-       PAGE LOAD
+       PAGE LOAD & SSO INITIALIZATION
        ========================================= */
 
     window.addEventListener(
@@ -8310,9 +8310,65 @@ let categoryLoadingPercent = 0;
       function() {
 
         loadBranches();
+        checkUrlSSO();
 
+        // Signal parent window (Laduma App) that Credit Notes module is ready
+        if (window.parent && window.parent !== window) {
+          try {
+            window.parent.postMessage({ type: "LADUMA_CREDIT_MODULE_READY" }, "*");
+          } catch (e) {
+            console.warn("Could not postMessage to parent window", e);
+          }
+        }
       }
     );
+
+    /* =========================================
+       SSO INTEGRATION WITH LADUMA APP
+       ========================================= */
+
+    window.addEventListener("message", function(event) {
+      if (event.data && event.data.type === "LADUMA_AUTH_INIT") {
+        const user = event.data.payload;
+        if (user && user.userId && user.userType) {
+          console.log("Authenticated via Laduma App SSO:", user.userName, user.userType);
+
+          // Automatically sync federated user session with backend
+          if (typeof google !== "undefined" && google.script && google.script.run) {
+            google.script.run
+              .withSuccessHandler(function(backendUser) {
+                if (backendUser) {
+                  showDashboard(backendUser);
+                } else {
+                  showDashboard(user);
+                }
+              })
+              .withFailureHandler(function(err) {
+                console.warn("SSO backend sync warning (proceeding with local session):", err);
+                showDashboard(user);
+              })
+              .syncFederatedLadumaUser(user);
+          } else {
+            showDashboard(user);
+          }
+        }
+      }
+    });
+
+    function checkUrlSSO() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const ssoParam = params.get("laduma_sso");
+        if (ssoParam) {
+          const user = JSON.parse(decodeURIComponent(ssoParam));
+          if (user && user.userId && user.userType) {
+            showDashboard(user);
+          }
+        }
+      } catch (e) {
+        console.warn("URL SSO parsing skipped", e);
+      }
+    }
 
 
     /* =========================================
