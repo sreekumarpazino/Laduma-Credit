@@ -5,10 +5,12 @@ const BRANCH_SHEET = "Branches";
 const REGION_SHEET = "Regions";
 
 
-function doGet() {
+function doGet(e) {
   return HtmlService
     .createHtmlOutputFromFile("Index")
-    .setTitle("Laduma – Pending Credit Note Management");
+    .setTitle("Laduma – Pending Credit Note Management")
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+    .addMetaTag("viewport", "width=device-width, initial-scale=1");
 }
 
 /* =========================================
